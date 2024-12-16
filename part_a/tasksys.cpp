@@ -1,5 +1,5 @@
 #include "tasksys.h"
-
+#include <thread>
 
 IRunnable::~IRunnable() {}
 
@@ -48,7 +48,7 @@ const char* TaskSystemParallelSpawn::name() {
     return "Parallel + Always Spawn";
 }
 
-TaskSystemParallelSpawn::TaskSystemParallelSpawn(int num_threads): ITaskSystem(num_threads) {
+TaskSystemParallelSpawn::TaskSystemParallelSpawn(int num_threads): ITaskSystem(num_threads), max_threads(num_threads) {
     //
     // TODO: CS149 student implementations may decide to perform setup
     // operations (such as thread pool construction) here.
@@ -67,9 +67,21 @@ void TaskSystemParallelSpawn::run(IRunnable* runnable, int num_total_tasks) {
     // method in Part A.  The implementation provided below runs all
     // tasks sequentially on the calling thread.
     //
+    std::vector<std::thread> threads;
+    threads.reserve(this->max_threads);
 
-    for (int i = 0; i < num_total_tasks; i++) {
-        runnable->runTask(i, num_total_tasks);
+    for (int task_id = 0; task_id < num_total_tasks; task_id++) {
+        threads.emplace_back([runnable, task_id, num_total_tasks]() {
+            runnable->runTask(task_id, num_total_tasks);
+        });
+        
+        if ((task_id + 1) % this->max_threads == 0 || task_id == num_total_tasks - 1) {
+            // 当线程数达到最大或是最后一批任务时
+            for (auto& thread : threads) {
+                thread.join();
+            }
+            threads.clear();
+        }
     }
 }
 
