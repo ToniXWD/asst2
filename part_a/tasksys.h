@@ -6,6 +6,7 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <condition_variable>
 /*
  * TaskSystemSerial: This class is the student's implementation of a
  * serial task execution engine.  See definition of ITaskSystem in
@@ -53,10 +54,8 @@ class TaskSystemParallelThreadPoolSpinning: public ITaskSystem {
         int total_task_num;
         std::vector<std::thread> worker_pool;
         IRunnable* runnable_ptr{nullptr};
-        int left_task_num = 0;
-        std::mutex global_lock;
+        std::atomic<int> left_task_num {0};
         std::atomic<bool> is_finished {false};
-        std::atomic<int> finished_num {0};
     public:
         TaskSystemParallelThreadPoolSpinning(int num_threads);
         ~TaskSystemParallelThreadPoolSpinning();
@@ -74,6 +73,18 @@ class TaskSystemParallelThreadPoolSpinning: public ITaskSystem {
  * itasksys.h for documentation of the ITaskSystem interface.
  */
 class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
+    private:
+        int max_threads;
+        int total_task_num;
+        std::vector<std::thread> worker_pool;
+        IRunnable* runnable_ptr{nullptr};
+        std::atomic<int> left_task_num {0};
+        std::atomic<bool> is_finished {false};
+
+        std::mutex start_lock;
+        std::mutex success_lock;
+        std::condition_variable cv_start;
+        std::condition_variable cv_success;
     public:
         TaskSystemParallelThreadPoolSleeping(int num_threads);
         ~TaskSystemParallelThreadPoolSleeping();

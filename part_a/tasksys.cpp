@@ -1,4 +1,6 @@
 #include "tasksys.h"
+#include <iostream>
+#include <mutex>
 #include <thread>
 
 IRunnable::~IRunnable() {}
@@ -115,20 +117,24 @@ TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int n
     //
     auto task_func = [&]() {
         while (!this->is_finished) {
-            global_lock.lock();
-            if (left_task_num > 0 && this->runnable_ptr != nullptr) {
+            if (this->left_task_num == 0) {
+                continue;
+            }
+            if (this->left_task_num > 0 && this->runnable_ptr != nullptr) {
                 IRunnable* runnable = this->runnable_ptr;
-                auto cur_task_id = this->total_task_num - left_task_num;
-                left_task_num--;
-                global_lock.unlock();
-                runnable->runTask(cur_task_id, this->total_task_num);
-                this->finished_num++;
-                if (this->finished_num == this->total_task_num) {
+                auto prev_left_task_num = this->left_task_num.fetch_sub(1); // 关键的原子操作，每个线程得到当前剩余的任务数量，从而获取一个任务索引
+                if (prev_left_task_num <= 0) {
                     this->is_finished = true;
+                    return;
+                }
+                auto cur_task_id = this->total_task_num - prev_left_task_num;
+                runnable->runTask(cur_task_id, this->total_task_num);
+                if (prev_left_task_num == 1) {
+                    this->is_finished = true;
+                    return;
                 }
                 continue;
             }
-            global_lock.unlock();
         }
     };
     for (int i = 0; i < this->max_threads; i++) {
@@ -153,13 +159,10 @@ void TaskSystemParallelThreadPoolSpinning::run(IRunnable* runnable, int num_tota
     // method in Part A.  The implementation provided below runs all
     // tasks sequentially on the calling thread.
     //
-    global_lock.lock();
     this->total_task_num = num_total_tasks;  // 设置总任务数
-    this->finished_num = 0;                  // 重置完成数
     this->is_finished = false;               // 重置完成标志
     this->runnable_ptr = runnable;
-    left_task_num = num_total_tasks;
-    global_lock.unlock();
+    this->left_task_num = num_total_tasks;
 
     while (!this->is_finished) {
         // std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -187,13 +190,44 @@ const char* TaskSystemParallelThreadPoolSleeping::name() {
     return "Parallel + Thread Pool + Sleep";
 }
 
-TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int num_threads): ITaskSystem(num_threads) {
+TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int num_threads): ITaskSystem(num_threads), max_threads(num_threads) {
     //
     // TODO: CS149 student implementations may decide to perform setup
     // operations (such as thread pool construction) here.
     // Implementations are free to add new class member variables
     // (requiring changes to tasksys.h).
     //
+    auto task_func = [&]() {
+        while (!this->is_finished) {
+            // 下面的 while 语句只会在任务开始时执行一次，因为之后的 total_task_num 会大于 0
+            while (this->total_task_num == 0) {
+                std::unique_lock<std::mutex> start_l(start_lock);
+                this->cv_start.wait(start_l);
+            }
+            
+            if (this->left_task_num > 0 && this->runnable_ptr != nullptr) {
+                IRunnable* runnable = this->runnable_ptr;
+                auto prev_left_task_num = this->left_task_num.fetch_sub(1); // 关键的原子操作，每个线程得到当前剩余的任务数量，从而获取一个任务索引
+                if (prev_left_task_num <= 0) {
+                    this->is_finished = true;
+                    cv_start.notify_one();
+                    return;
+                }
+                auto cur_task_id = this->total_task_num - prev_left_task_num;
+                runnable->runTask(cur_task_id, this->total_task_num);
+                if (prev_left_task_num == 1) {
+                    this->is_finished = true;
+                    cv_success.notify_one();
+                    return;
+                }
+                continue;
+            }
+        }
+    };
+
+    for (int i = 0; i < this->max_threads; i++) {
+        this->worker_pool.emplace_back(task_func);
+    }
 }
 
 TaskSystemParallelThreadPoolSleeping::~TaskSystemParallelThreadPoolSleeping() {
@@ -203,6 +237,11 @@ TaskSystemParallelThreadPoolSleeping::~TaskSystemParallelThreadPoolSleeping() {
     // Implementations are free to add new class member variables
     // (requiring changes to tasksys.h).
     //
+    for (auto& worker : worker_pool) {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
 }
 
 void TaskSystemParallelThreadPoolSleeping::run(IRunnable* runnable, int num_total_tasks) {
@@ -213,9 +252,16 @@ void TaskSystemParallelThreadPoolSleeping::run(IRunnable* runnable, int num_tota
     // method in Parts A and B.  The implementation provided below runs all
     // tasks sequentially on the calling thread.
     //
+    this->total_task_num = num_total_tasks;  // 设置总任务数
+    this->left_task_num = num_total_tasks;
+    this->is_finished = false;               // 重置完成标志
+    this->runnable_ptr = runnable;
 
-    for (int i = 0; i < num_total_tasks; i++) {
-        runnable->runTask(i, num_total_tasks);
+    cv_start.notify_all();
+
+    std::unique_lock<std::mutex> sl(this->success_lock);
+    while (!this->is_finished) {
+        this->cv_success.wait(sl);
     }
 }
 
