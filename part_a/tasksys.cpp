@@ -106,16 +106,44 @@ const char* TaskSystemParallelThreadPoolSpinning::name() {
     return "Parallel + Thread Pool + Spin";
 }
 
-TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int num_threads): ITaskSystem(num_threads) {
+TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int num_threads): ITaskSystem(num_threads), max_threads(num_threads) {
     //
     // TODO: CS149 student implementations may decide to perform setup
     // operations (such as thread pool construction) here.
     // Implementations are free to add new class member variables
     // (requiring changes to tasksys.h).
     //
+    auto task_func = [&]() {
+        while (!this->is_finished) {
+            global_lock.lock();
+            if (left_task_num > 0 && this->runnable_ptr != nullptr) {
+                IRunnable* runnable = this->runnable_ptr;
+                auto cur_task_id = this->total_task_num - left_task_num;
+                left_task_num--;
+                global_lock.unlock();
+                runnable->runTask(cur_task_id, this->total_task_num);
+                this->finished_num++;
+                if (this->finished_num == this->total_task_num) {
+                    this->is_finished = true;
+                }
+                continue;
+            }
+            global_lock.unlock();
+        }
+    };
+    for (int i = 0; i < this->max_threads; i++) {
+        this->worker_pool.emplace_back(task_func);
+    }
 }
 
-TaskSystemParallelThreadPoolSpinning::~TaskSystemParallelThreadPoolSpinning() {}
+TaskSystemParallelThreadPoolSpinning::~TaskSystemParallelThreadPoolSpinning() {
+    // 等待所有线程完成
+    for (auto& worker : worker_pool) {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+}
 
 void TaskSystemParallelThreadPoolSpinning::run(IRunnable* runnable, int num_total_tasks) {
 
@@ -125,9 +153,16 @@ void TaskSystemParallelThreadPoolSpinning::run(IRunnable* runnable, int num_tota
     // method in Part A.  The implementation provided below runs all
     // tasks sequentially on the calling thread.
     //
+    global_lock.lock();
+    this->total_task_num = num_total_tasks;  // 设置总任务数
+    this->finished_num = 0;                  // 重置完成数
+    this->is_finished = false;               // 重置完成标志
+    this->runnable_ptr = runnable;
+    left_task_num = num_total_tasks;
+    global_lock.unlock();
 
-    for (int i = 0; i < num_total_tasks; i++) {
-        runnable->runTask(i, num_total_tasks);
+    while (!this->is_finished) {
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 
