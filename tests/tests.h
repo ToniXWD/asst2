@@ -7,8 +7,8 @@
 #include <atomic>
 #include <set>
 
-#include "CycleTimer.h"
-#include "itasksys.h"
+#include "../common/CycleTimer.h"
+#include "../part_a/itasksys.h"
 
 /*
 Sync tests

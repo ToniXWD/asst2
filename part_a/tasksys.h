@@ -51,11 +51,12 @@ class TaskSystemParallelSpawn: public ITaskSystem {
 class TaskSystemParallelThreadPoolSpinning: public ITaskSystem {
     private:
         int max_threads;
-        int total_task_num;
+        std::atomic<int> total_task_num{0};
         std::vector<std::thread> worker_pool;
         IRunnable* runnable_ptr{nullptr};
         std::atomic<int> left_task_num {0};
         std::atomic<bool> is_finished {false};
+        std::atomic<bool> is_terminate {false};
     public:
         TaskSystemParallelThreadPoolSpinning(int num_threads);
         ~TaskSystemParallelThreadPoolSpinning();
@@ -85,6 +86,8 @@ class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
         std::mutex success_lock;
         std::condition_variable cv_start;
         std::condition_variable cv_success;
+        std::atomic<bool> is_terminate {false};
+
     public:
         TaskSystemParallelThreadPoolSleeping(int num_threads);
         ~TaskSystemParallelThreadPoolSleeping();

@@ -64,6 +64,7 @@ LIST_OF_IMPLEMENTATIONS = [
 def run_test(cmd, is_reference):
     runtimes = {}
     try:
+        print(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('utf-8')
         for line in output.split('\n'):
             m = re.match(r'\[(.*)\]:\s+\[(\d+\.\d+)\] ms', line)

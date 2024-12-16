@@ -4,7 +4,7 @@
 #include <string>
 #include <assert.h>
 
-#include "tasksys.h"
+#include "../part_a/tasksys.h"
 #include "tests.h"
 
 #define DEFAULT_NUM_THREADS 8

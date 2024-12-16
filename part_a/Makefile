@@ -1,12 +1,13 @@
 ARCH := $(shell uname -m)
 
 ifeq ($(ARCH), aarch64)
-    CXX = g++
+    CXX = clang++
 else
-    CXX = g++ -m64
+    CXX = clang++ -m64
 endif
 
 CXXFLAGS=-I. -I../common -I../tests -Iobjs/ -O3 -std=c++11 -Wall
+# CXXFLAGS=-I. -I../common -I../tests -Iobjs/ -g -std=c++11 -Wall
 
 APP_NAME=runtasks
 OBJDIR=objs
