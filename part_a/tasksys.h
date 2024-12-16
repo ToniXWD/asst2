@@ -51,12 +51,15 @@ class TaskSystemParallelSpawn: public ITaskSystem {
 class TaskSystemParallelThreadPoolSpinning: public ITaskSystem {
     private:
         int max_threads;
-        std::atomic<int> total_task_num{0};
+        int total_task_num{0};
         std::vector<std::thread> worker_pool;
-        IRunnable* runnable_ptr{nullptr};
-        std::atomic<int> left_task_num {0};
-        std::atomic<bool> is_finished {false};
-        std::atomic<bool> is_terminate {false};
+        IRunnable* runner{nullptr};
+        int left_task_num {0};
+        std::atomic<int> finished_task_num {0};
+        bool is_terminate {false};
+        std::mutex mspin;
+
+        void worker();
     public:
         TaskSystemParallelThreadPoolSpinning(int num_threads);
         ~TaskSystemParallelThreadPoolSpinning();
@@ -75,19 +78,16 @@ class TaskSystemParallelThreadPoolSpinning: public ITaskSystem {
  */
 class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
     private:
-        int max_threads;
-        int total_task_num;
-        std::vector<std::thread> worker_pool;
-        IRunnable* runnable_ptr{nullptr};
-        std::atomic<int> left_task_num {0};
-        std::atomic<bool> is_finished {false};
+        int num_threads;
+        std::thread* workers;
+        bool stop{false};
+        int total_task_num{0}, left_task_num{0}, finished_task_num{0};
+        std::mutex mtx_worker, mtx_finish;
+        std::condition_variable cv_worker;
+        std::condition_variable cv_finish;
+        IRunnable* runner;
 
-        std::mutex start_lock;
-        std::mutex success_lock;
-        std::condition_variable cv_start;
-        std::condition_variable cv_success;
-        std::atomic<bool> is_terminate {false};
-
+        void worker();
     public:
         TaskSystemParallelThreadPoolSleeping(int num_threads);
         ~TaskSystemParallelThreadPoolSleeping();
