@@ -231,9 +231,8 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int n
     stop = false;
     total_task_num = left_task_num = 0;
 
-    workers = new std::thread[num_threads];
     for (int i = 0; i < num_threads; ++i) {
-        workers[i] = std::thread([this]() { worker(); });
+        workers.push_back(std::thread([this]() { worker(); }));
     }
 }
 

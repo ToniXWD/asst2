@@ -79,7 +79,7 @@ class TaskSystemParallelThreadPoolSpinning: public ITaskSystem {
 class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
     private:
         int num_threads;
-        std::thread* workers;
+        std::vector<std::thread> workers;
         bool stop{false};
         int total_task_num{0}, left_task_num{0}, finished_task_num{0};
         std::mutex mtx_worker, mtx_finish;
