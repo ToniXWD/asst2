@@ -222,18 +222,18 @@ TaskID TaskSystemParallelThreadPoolSleeping::runAsyncWithDeps(IRunnable* runnabl
     // TODO: CS149 students will implement this method in Part B.
     //
 
-    // 先等待依赖任务完成
-    for (const auto& dep : deps) {
-        TaskContext* task_context = this->task_contexts[dep];
-        std::unique_lock<std::mutex> lock(task_context->mtx);
-        task_context->cv.wait(lock, [task_context]() { return task_context->is_finished; });
-    }
-
     int cur_task_id = this->next_task_id.fetch_add(1);
     TaskContext* task_context = new TaskContext(cur_task_id);
 
     // 在另一个线程中执行任务 TaskSystemParallelThreadPoolSleeping::run 函数
-    std::thread([this, runnable, num_total_tasks, task_context]() {
+    std::thread([this, runnable, num_total_tasks, task_context, &deps]() {
+            // 先等待依赖任务完成
+        for (const auto& dep : deps) {
+            TaskContext* task_context = this->task_contexts[dep];
+            std::unique_lock<std::mutex> lock(task_context->mtx);
+            task_context->cv.wait(lock, [task_context]() { return task_context->is_finished; });
+        }
+
         this->run(runnable, num_total_tasks);
         {
             std::lock_guard<std::mutex> lock(task_context->mtx);
